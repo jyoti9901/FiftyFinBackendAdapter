@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+       http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd
+       http://camel.apache.org/schema/spring       https://camel.apache.org/schema/spring/camel-spring.xsd">
+	<routeContext id="fiftyFinRouteContext" xmlns="http://camel.apache.org/schema/spring">
+		<route id="fiftyFin_impl">
+			<from uri="direct:fiftyFin"/>
+			<convertBodyTo type="java.lang.String"/>
+			<setProperty name="processName">
+				<simple>{{route.fiftyFin_ProcessName}}</simple>
+			</setProperty>
+			<setProperty name="serviceName">
+				<simple>{{route.ServiceName}}</simple>
+			</setProperty>
+			<setProperty name="transactionId">
+				<simple>${header.transactionId}</simple>
+			</setProperty>
+			<setProperty name="sourceName">
+				<simple>${header.SourceName}</simple>
+			</setProperty>
+			<setProperty name="conversationId">
+				<simple>${header.ConversationID}</simple>
+			</setProperty>
+			<setProperty name="targetSystem">
+				<simple>FiftyFin</simple>
+			</setProperty>
+			<setProperty name="MaskFields">
+				<simple>{{route.fiftyFin_MaskFields}}</simple>
+			</setProperty>
+			<removeHeaders pattern="*"/>
+			<setHeader name="Content-Type">
+				<simple>application/json</simple>
+			</setHeader>
+			<setProperty name="messageType">
+				<simple>TargetRequest</simple>
+			</setProperty>
+			<setProperty name="CurrentTimestamp">
+				<simple>${date-with-timezone:now:IST:dd-MMM-yyyy HH:mm:ss.SSS}</simple>
+			</setProperty>
+			<!-- Logging Target Request -->
+			<wireTap uri="seda:loggerprocess"/>
+			<!-- Do not add throwExceptionOnFailure=false because response hadling will fail at front end 
+				 If it is required to add, than do change the sourceResponse generator java file in front end -->
+			<doTry>
+			    <log message="In ${routeId}, Calling Target URL fiftyFin_TargetURL with Request Received :::::${body}" />
+			
+				<choice id="FiftyFinServiceBEURL_URL">	
+			    <when id="FiftyFinServiceBEURL_URL">
+				<simple>'{{route.FiftyFinServiceBEURLProxy}}' == 'Y'</simple>
+				<to uri="{{route.fiftyFin_TargetURL}}?httpMethod=POST&amp;connectTimeout={{route.fiftyFin_ConnectTimeout}}&amp;socketTimeout={{route.fiftyFin_SocketTimeout}}&amp;proxyAuthHost={{http.proxyHost}}&amp;proxyAuthPort={{http.proxyPort}}&amp;proxyAuthScheme=http"/>
+				</when>
+					<otherwise>
+						<to uri="{{route.fiftyFin_TargetURL}}?httpMethod=POST&amp;connectTimeout={{route.fiftyFin_ConnectTimeout}}&amp;socketTimeout={{route.fiftyFin_SocketTimeout}}" />
+				</otherwise>
+			    </choice>
+			    
+				<log message="In ${routeId}, Received Response from target url fiftyFin_TargetURL  :::: :${body} " />
+				<doCatch>
+					<exception>org.apache.camel.http.base.HttpOperationFailedException</exception>
+					<!-- In this case response is created through common exception handler-->
+					<setProperty name="ExpMsg">
+						<simple>${exception.message}</simple>
+					</setProperty>
+					<setProperty name="errorAt">
+						<simple>Target</simple>
+					</setProperty>
+					<setProperty name="TargetSystemName">
+						<simple>FiftyFin</simple>
+					</setProperty>
+					<bean method="removeNewLinesFromExpMsg" ref="RemoveNewLinesFromExpMsgAndName"/>
+					<setProperty name="ErrorMessage">
+						<simple>${exchangeProperty.ExpMsg}</simple>
+					</setProperty>
+					<bean method="failedMessages" ref="org.tatacap.exception.HttpErrors"/>
+					<convertBodyTo type="java.lang.String"/>
+					<setHeader name="Responsestatus">
+						<simple>Failure</simple>
+					</setHeader>
+					<setHeader name="Content-Type">
+						<simple>application/json</simple>
+					</setHeader>
+					<setProperty name="stacktrace">
+						<simple>${exception.stacktrace}</simple>
+					</setProperty>
+					<setHeader name="exceptionName">
+						<simple>${exception.getClass().getCanonicalName()}</simple>
+					</setHeader>
+					<bean method="removeNewLinesFromExpName" ref="RemoveNewLinesFromExpMsgAndName"/>
+					<setHeader name="TargetExceptionOccuredAndCatchedFlag">
+						<simple>Yes</simple>
+					</setHeader>
+				</doCatch>
+				<doCatch>
+					<exception>org.apache.http.conn.HttpHostConnectException</exception>
+					<exception>java.net.ConnectException</exception>
+					<exception>org.apache.http.conn.ConnectTimeoutException</exception>
+					<exception>java.net.SocketTimeoutException</exception>
+					<exception>org.apache.http.NoHttpResponseException</exception>
+					<exception>java.net.NoRouteToHostException</exception>
+					<exception>javax.net.ssl.SSLException</exception>
+					<exception>java.net.UnknownHostException</exception>
+					<exception>java.lang.Exception</exception>
+					<setProperty name="ExpMsg">
+						<simple>${exception.message}</simple>
+					</setProperty>
+					<bean method="removeNewLinesFromExpMsg" ref="RemoveNewLinesFromExpMsgAndName"/>
+					<setBody>
+						<simple>{"retStatus": "ERROR","errorMessage" : "${exchangeProperty.ExpMsg}"}</simple>
+					</setBody>
+					<convertBodyTo type="java.lang.String"/>
+					<setHeader name="Responsestatus">
+						<simple>Failure</simple>
+					</setHeader>
+					<setHeader name="Content-Type">
+						<simple>application/json</simple>
+					</setHeader>
+					<setProperty name="stacktrace">
+						<simple>${exception.stacktrace}</simple>
+					</setProperty>
+					<setHeader name="exceptionName">
+						<simple>${exception.getClass().getCanonicalName()}</simple>
+					</setHeader>
+					<bean method="removeNewLinesFromExpName" ref="RemoveNewLinesFromExpMsgAndName"/>
+					<setHeader name="TargetExceptionOccuredAndCatchedFlag">
+						<simple>Yes</simple>
+					</setHeader>
+				</doCatch>
+			</doTry>
+			<convertBodyTo type="java.lang.String"/>
+			<choice>
+				<when>
+					<!-- In case target does not send any body-->
+					<simple>${body} == "" || ${body} == null </simple>
+					<setBody>
+						<simple>{}</simple>
+					</setBody>
+				</when>
+			</choice>
+			<setBody>
+				<simple>${body}</simple>
+			</setBody>
+			<setHeader name="Content-Type">
+				<simple>application/json</simple>
+			</setHeader>
+			<setProperty name="MaskFields">
+				<simple>{{route.fiftyFin_MaskFields}}</simple>
+			</setProperty>
+			<setProperty name="messageType">
+				<simple>TargetResponse</simple>
+			</setProperty>
+			<setProperty name="CurrentTimestamp">
+				<simple>${date-with-timezone:now:IST:dd-MMM-yyyy HH:mm:ss.SSS}</simple>
+			</setProperty>
+			<!-- Logging Target Response -->
+			<wireTap uri="seda:loggerprocess"/>
+			<removeHeaders pattern="*" excludePattern="(?i)CamelHttpResponseCode|(?i)Content-Type|(?i)TargetExceptionOccuredAndCatchedFlag|(?i)exceptionName|(?i)"/>
+			<onException useOriginalMessage="true">
+				<exception>java.lang.Exception</exception>
+				<handled>
+					<constant>true</constant>
+				</handled>
+				<setProperty name="ExpMsg">
+					<simple>${exception.message}</simple>
+				</setProperty>
+				<bean method="removeNewLinesFromExpMsg" ref="RemoveNewLinesFromExpMsgAndName"/>
+				<setHeader name="exceptionName">
+					<simple>${exception.getClass().getCanonicalName()}</simple>
+				</setHeader>
+				<bean method="removeNewLinesFromExpName" ref="RemoveNewLinesFromExpMsgAndName"/>
+				<setProperty name="stacktrace">
+					<simple>${exception.stacktrace}</simple>
+				</setProperty>
+				<setBody>
+					<simple>{"retStatus": "ERROR","errorMessage" : "${exchangeProperty.ExpMsg}"}</simple>
+				</setBody>
+				<convertBodyTo type="java.lang.String"/>
+				<setHeader name="Content-Type">
+					<simple>application/json</simple>
+				</setHeader>
+				<setProperty name="MaskFields">
+					<simple>{{route.fiftyFin_MaskFields}}</simple>
+				</setProperty>
+				<setHeader name="Responsestatus">
+					<simple>Failure</simple>
+				</setHeader>
+				<setHeader name="ESBExceptionOccuredAndCatchedFlag">
+					<simple>Yes</simple>
+				</setHeader>
+				<setProperty name="MessageType">
+					<simple>TargetResponse</simple>
+				</setProperty>
+				<setProperty name="CurrentTimestamp">
+					<simple>${date-with-timezone:now:IST:dd-MMM-yyyy HH:mm:ss.SSS}</simple>
+				</setProperty>
+				<!-- Logging Target Response In case of java.lang.Exception occured in 	our code -->
+				<wireTap uri="seda:loggerprocess"/>
+			</onException>
+		</route>
+	</routeContext>
+</beans>

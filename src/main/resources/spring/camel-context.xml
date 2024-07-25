@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd        http://camel.apache.org/schema/spring       http://camel.apache.org/schema/spring/camel-spring.xsd    ">
+
+	<import resource="loggerroutercontext.xml" />
+	<import resource="fiftyfin_BE.xml" />
+	<camelContext id="FiftyFinBackEndAdapter" xmlns="http://camel.apache.org/schema/spring">
+		<routeContextRef ref="CommonLogRoutes" />
+		<routeContextRef ref="fiftyFinRouteContext" />
+
+		<dataFormats>
+			<jacksonXml id="jack" />
+		</dataFormats>
+
+		<restConfiguration component="jetty" port="{{jetty.port}}">
+			<apiProperty key="cors" value="true" />
+		</restConfiguration>
+
+		<rest path="/rest/v1.0/fityfinbe">
+			<get path="/healthCheckReadiness">
+				<!-- <description>Health Check Route</description> -->
+				<responseMessage message="Its Up and Running" />
+				<to uri="mock:update" />
+			</get>
+			<get path="/healthCheckLiveness">
+				<!-- <description>Health Check Route</description> -->
+				<responseMessage message="Its Up and Running" />
+				<to uri="mock:update" />
+			</get>
+			<post consumes="application/json" path="/fiftyFin">
+				<!-- <description>fiftyFin Route</description> -->
+				<to uri="direct:fiftyFin" />
+			</post>
+		</rest>
+	</camelContext>
+</beans>
